@@ -6,15 +6,16 @@ from torchvision import transforms, datasets
 
 from core import Smooth 
 from DRM import DiffusionRobustModel
+from datasets import get_dataset
 
-
-IMAGENET_DATA_DIR = "data/imagenet"
+HYPER_DATA_DIR = "/storage/vatsal/datasets/hyper"
 
 def main(args):
-    model = DiffusionRobustModel()
+    model = DiffusionRobustModel(classifier_name="vit")
 
     transform = transforms.Compose([transforms.Resize(256), transforms.CenterCrop(224), transforms.ToTensor()])
-    dataset = datasets.ImageFolder(root=IMAGENET_DATA_DIR, transform=transform)
+    # dataset = datasets.ImageFolder(root=IMAGENET_DATA_DIR, transform=transform)
+    dataset = get_dataset("hyper", 'test', HYPER_DATA_DIR)
 
     # Get the timestep t corresponding to noise level sigma
     target_sigma = args.sigma * 2

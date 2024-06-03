@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn 
 import timm
+from architectures import CLASSIFIERS_ARCHITECTURES, get_architecture
 
 from guided_diffusion.script_util import (
     NUM_CLASSES,
@@ -56,11 +57,23 @@ class DiffusionRobustModel(nn.Module):
 
         self.model = model 
         self.diffusion = diffusion 
+        self.classifier_name = classifier_name
 
-        # Load the BEiT model
-        classifier = timm.create_model('beit_large_patch16_512', pretrained=True)
+        # Load the classifier model
+        if classifier_name == "beit":
+            classifier = timm.create_model('beit_large_patch16_512', pretrained=True)
+            
+
+        elif classifier_name == "vit":
+            model_path = "/storage/vatsal/models/hyper/ViT-1e-1/checkpoint.pth.tar"
+            classifier = get_architecture("google/vit-base-patch16-224-in21k", "hyper")
+            print("=> loading checkpoint '{}'".format(model_path))
+            checkpoint = torch.load(model_path,
+                                map_location=lambda storage, loc: storage)
+            model.load_state_dict(checkpoint['state_dict'])
+            print("=> loaded checkpoint '{}' (epoch {})".format(model_path, checkpoint['epoch']))
+
         classifier.eval().cuda()
-
         self.classifier = classifier
 
         self.model = torch.nn.DataParallel(self.model).cuda()
@@ -70,7 +83,11 @@ class DiffusionRobustModel(nn.Module):
         x_in = x * 2 -1
         imgs = self.denoise(x_in, t)
 
-        imgs = torch.nn.functional.interpolate(imgs, (512, 512), mode='bicubic', antialias=True)
+        if self.classifier_name == "vit":
+            imgs = torch.nn.functional.interpolate(imgs, (224, 224), mode='bicubic', antialias=True)
+
+        elif self.classifier_name == "beit":
+            imgs = torch.nn.functional.interpolate(imgs, (512, 512), mode='bicubic', antialias=True)
 
         imgs = torch.tensor(imgs).cuda()
         with torch.no_grad():
