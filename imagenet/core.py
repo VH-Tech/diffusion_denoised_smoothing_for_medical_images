@@ -39,6 +39,7 @@ class Smooth(object):
         self.base_classifier.eval()
         # draw samples of f(x+ epsilon)
         counts_selection = self._sample_noise(x, n0, batch_size)
+        print("stuck at line 41")
         # use these samples to take a guess at the top class
         cAHat = counts_selection.argmax().item()
         # draw more samples of f(x + epsilon)
@@ -88,8 +89,9 @@ class Smooth(object):
                 num -= this_batch_size
 
                 batch = x.repeat((this_batch_size, 1, 1, 1))
-
-                predictions = self.base_classifier(batch, self.t).argmax(1)
+                print("stuck at line 92")
+                predictions = self.base_classifier(batch, self.t).logits.argmax(1)
+                print("stuck at line 94")
                 counts += self._count_arr(predictions.cpu().numpy(), self.num_classes)
             return counts
 

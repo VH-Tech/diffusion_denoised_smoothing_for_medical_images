@@ -70,7 +70,7 @@ class DiffusionRobustModel(nn.Module):
             print("=> loading checkpoint '{}'".format(model_path))
             checkpoint = torch.load(model_path,
                                 map_location=lambda storage, loc: storage)
-            model.load_state_dict(checkpoint['state_dict'])
+            classifier.load_state_dict(checkpoint['state_dict'])
             print("=> loaded checkpoint '{}' (epoch {})".format(model_path, checkpoint['epoch']))
 
         classifier.eval().cuda()

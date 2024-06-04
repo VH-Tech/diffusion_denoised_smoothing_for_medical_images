@@ -8,6 +8,24 @@ from core import Smooth
 from DRM import DiffusionRobustModel
 from datasets import get_dataset
 
+
+from architectures import CLASSIFIERS_ARCHITECTURES, get_architecture
+from datasets import get_dataset, DATASETS
+
+from torch.nn import CrossEntropyLoss
+from torch.optim import SGD, Optimizer
+from torch.optim.lr_scheduler import StepLR
+from torch.utils.data import DataLoader
+from train_utils import AverageMeter, accuracy, init_logfile, log, copy_code
+
+import argparse
+import datetime
+import numpy as np
+import os
+import time
+import torch
+import random
+
 HYPER_DATA_DIR = "/storage/vatsal/datasets/hyper"
 
 def main(args):
@@ -35,26 +53,95 @@ def main(args):
 
     total_num = 0
     correct = 0
-    for i in range(len(dataset)):
-        if i % args.skip != 0:
-            continue
+    # for i in range(len(dataset)):
+    #     # if i % args.skip != 0:
+    #     #     continue
 
-        (x, label) = dataset[i]
-        x = x.cuda()
+    #     (x, label) = dataset[i]
+    #     x = x.cuda()
+    #     print("started")
+    #     before_time = time.time()
+    #     # prediction, radius = smoothed_classifier.certify(x, args.N0, args.N, args.alpha, args.batch_size)
+  
+    #     print(test_loss, test_acc)
+    #     after_time = time.time()
+    #     print("ended")
+    #     correct += int(prediction == label)
 
-        before_time = time.time()
-        prediction, radius = smoothed_classifier.certify(x, args.N0, args.N, args.alpha, args.batch_size)
-        after_time = time.time()
+    #     time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
+    #     total_num += 1
 
-        correct += int(prediction == label)
+    #     print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
+    #         i, label, prediction, radius, correct, time_elapsed), file=f, flush=True)
+    print("started")
+    test_loader = DataLoader(dataset, shuffle=False, batch_size=64,num_workers=4)
+    criterion = CrossEntropyLoss().cuda()
+    test_loss, test_acc = test(test_loader, model, criterion, args.sigma, t)
+    print("Test loss: %.4f, Test accuracy: %.4f" % (test_loss, test_acc))
+    # print("sigma %.2f accuracy of smoothed classifier %.4f "%(args.sigma, correct/float(total_num)))
 
-        time_elapsed = str(datetime.timedelta(seconds=(after_time - before_time)))
-        total_num += 1
 
-        print("{}\t{}\t{}\t{:.3}\t{}\t{}".format(
-            i, label, prediction, radius, correct, time_elapsed), file=f, flush=True)
+def test(loader: DataLoader, model: torch.nn.Module, criterion, noise_sd: float, t: int):
+    """
+    Function to evaluate the trained model
+        :param loader:DataLoader: dataloader (train)
+        :param model:torch.nn.Module: the classifer being evaluated
+        :param criterion: the loss function
+        :param noise_sd:float: the std-dev of the Guassian noise perturbation of the input
+    """
+    batch_time = AverageMeter()
+    data_time = AverageMeter()
+    losses = AverageMeter()
+    top1 = AverageMeter()
+    # top5 = AverageMeter()
+    end = time.time()
 
-    print("sigma %.2f accuracy of smoothed classifier %.4f "%(args.sigma, correct/float(total_num)))
+    # switch to eval mode
+    model.eval()
+
+    with torch.no_grad():
+        for i, (inputs, targets) in enumerate(loader):
+            # measure data loading time
+            data_time.update(time.time() - end)
+
+            inputs = inputs.cuda()
+            targets = targets.cuda()
+
+            if noise_sd == -1:
+                #choose randomly a value between 0 and 1
+                noise_sd = random.random()
+
+            # augment inputs with noise
+            inputs = inputs + torch.randn_like(inputs, device='cuda') * noise_sd
+
+            # compute output
+            outputs = model(inputs, t)
+            outputs = outputs.logits
+                
+            loss = criterion(outputs, targets)
+
+            # measure accuracy and record loss
+            acc1 = accuracy(outputs, targets, topk=(1,))[0]
+            losses.update(loss.item(), inputs.size(0))
+            top1.update(acc1.item(), inputs.size(0))
+            # top5.update(acc5.item(), inputs.size(0))
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            
+            print('Test: [{0}/{1}]\t'
+                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+                      'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+                      'Acc@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
+                    i, len(loader), batch_time=batch_time,
+                    data_time=data_time, loss=losses, top1=top1))
+
+        return (losses.avg, top1.avg)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Predict on many examples')
